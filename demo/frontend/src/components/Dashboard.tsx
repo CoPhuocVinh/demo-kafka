@@ -5,6 +5,7 @@ import { MessageStream } from './MessageStream';
 import { ControlPanel } from './ControlPanel';
 import { ClusterVisualizer } from './ClusterVisualizer';
 import { Activity, Wifi, WifiOff, ExternalLink, LayoutDashboard, Network } from 'lucide-react';
+import { config } from '../config';
 
 export const Dashboard = () => {
   const { socket, isConnected } = useSocket();
@@ -120,7 +121,7 @@ export const Dashboard = () => {
 
             {/* Grafana Card */}
             <a 
-               href="http://localhost:3001" 
+               href={config.grafanaUrl} 
                target="_blank" 
                rel="noopener noreferrer"
                className="block group relative bg-gradient-to-br from-slate-900 to-indigo-950 rounded-2xl border border-indigo-500/20 p-6 overflow-hidden hover:border-indigo-500/50 transition-all duration-300 hover:shadow-[0_0_30px_-5px_theme(colors.indigo.500/0.3)]"
