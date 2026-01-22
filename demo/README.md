@@ -14,6 +14,9 @@ Demo này minh họa:
 - ✅ **3 partitions per topic** để demonstrate parallel processing
 - ✅ **Multiple consumer groups** consuming cùng lúc
 - ✅ **Real-time UI** với Socket.io để visualize data flow
+- ✅ **Laser beam animation** hiệu ứng tia laser khi message di chuyển qua các partitions
+- ✅ **Partition targeting** - gửi message tới partition cụ thể hoặc tự động
+- ✅ **Weighted distribution** - điều chỉnh tỷ lệ phân phối message theo partition
 - ✅ **Prometheus + Grafana** monitoring với custom dashboards
 - ✅ **Auto-deployment** với Docker Compose
 
@@ -100,35 +103,70 @@ docker exec kafka-1 kafka-consumer-groups.sh --bootstrap-server localhost:9092 -
 
 ## 📊 Demo Scenarios
 
-### Scenario 1: Xem Real-time Message Flow
+### Scenario 1: Xem Real-time Message Flow với Laser Effect
 
 1. Mở **React Frontend**: http://localhost:8080
-2. Messages tự động được produce mỗi 2 giây
-3. Quan sát data flow qua các partitions
-4. Xem 2 consumer groups process parallel
+2. Click **"Start Data Feed"** để bắt đầu gửi messages
+3. Quan sát **hiệu ứng tia laser** di chuyển:
+   - 🟠 **Producer → Partition**: Tia laser màu amber
+   - 🔵 **Partition 0 → Consumer 1**: Tia laser màu cyan
+   - 🟡 **Partition 1 → Consumer 2**: Tia laser màu amber  
+   - 🩷 **Partition 2 → Consumer 3**: Tia laser màu pink
+4. Xem **Message Stream** phía dưới hiển thị chi tiết từng message theo Consumer
 
-### Scenario 2: Monitor với Grafana
+### Scenario 2: Điều Chỉnh Partition Distribution
 
-1. Truy cập **Grafana**: http://localhost:3001 (admin/admin)
-2. Navigate Dashboard folder "Kafka"
-3. Xem 4 dashboards:
-   - Kafka Cluster Overview
-   - Message Throughput
-   - Consumer Lag
-   - Application Metrics
+1. Trong **Control Center**, tìm phần **"Partition Distribution"**
+2. Sử dụng sliders để điều chỉnh tỷ lệ messages gửi vào mỗi partition:
+   - **P0**: Slider cho Partition 0
+   - **P1**: Slider cho Partition 1
+   - **P2**: Slider cho Partition 2
+3. Ví dụ: Set P0=5, P1=3, P2=2 → 50% messages vào P0, 30% vào P1, 20% vào P2
 
-### Scenario 3: Produce Custom Messages
+### Scenario 3: Manual Event Injection với Partition Targeting
+
+1. Trong **Control Center**, tìm phần **"Manual Event Injection"**
+2. Chọn partition đích:
+   - **Auto**: Gửi theo weighted distribution (theo sliders)
+   - **P0/P1/P2**: Gửi trực tiếp tới partition cụ thể
+3. Nhập message JSON và click Send
+4. Quan sát tia laser di chuyển tới đúng partition đã chọn
 
 ```bash
-# Via REST API
+# Via REST API - Auto partition
 curl -X POST http://localhost:3000/demo/send \
   -H "Content-Type: application/json" \
-  -d '{"type": "custom", "data": "Hello Kafka!"}'
+  -d '{"type": "custom", "message": "Hello Kafka!"}'
+
+# Via REST API - Specific partition
+curl -X POST http://localhost:3000/demo/send \
+  -H "Content-Type: application/json" \
+  -d '{"type": "custom", "message": "To Partition 1!", "partition": 1}'
 
 # Start/stop auto-producer
 curl -X POST http://localhost:3000/demo/stop
 curl -X POST http://localhost:3000/demo/start
 ```
+
+### Scenario 4: Consumer Offset Seek (Replay Messages)
+
+1. Click vào bất kỳ **Consumer node** trong Visualizer
+2. Popup hiện ra với thông tin:
+   - Current Offset
+   - Latest Offset (High Watermark)
+   - Consumer Lag
+3. Nhập offset mới và click **Seek** để replay messages
+4. Hoặc click **Reset** để quay về offset 0
+
+### Scenario 5: Monitor với Grafana
+
+1. Truy cập **Grafana**: http://localhost:3001 (admin/admin)
+2. Navigate Dashboard folder "Kafka"
+3. Xem các metrics:
+   - Message Throughput
+   - Consumer Lag per partition
+   - WebSocket connections
+   - Application Metrics
 
 ## 🔧 Configuration
 
@@ -303,16 +341,28 @@ demo/
 ├── backend/                     # NestJS application
 │   ├── src/
 │   │   ├── kafka/              # Producer & Consumer services
+│   │   │   ├── producer.service.ts
+│   │   │   └── consumer.service.ts
 │   │   ├── websocket/          # Socket.io gateway
+│   │   │   └── events.gateway.ts
 │   │   ├── metrics/            # Prometheus metrics
-│   │   └── demo/               # Demo event generator
+│   │   │   └── metrics.service.ts
+│   │   └── demo/               # Demo controller & service
+│   │       ├── demo.controller.ts  # REST API endpoints
+│   │       └── demo.service.ts     # Business logic, partition weights
 │   ├── Dockerfile
 │   └── package.json
 ├── frontend/                    # React application
 │   ├── src/
-│   │   ├── components/         # React components
-│   │   ├── hooks/              # Custom hooks (useSocket)
-│   │   └── services/           # API services
+│   │   ├── components/
+│   │   │   ├── Dashboard.tsx       # Main layout
+│   │   │   ├── ClusterVisualizer.tsx # React Flow với laser effects
+│   │   │   ├── MessageStream.tsx   # Message log columns
+│   │   │   ├── ControlPanel.tsx    # Start/Stop, Partition config, Manual send
+│   │   │   └── ClusterStatus.tsx   # Metrics overview
+│   │   ├── hooks/
+│   │   │   └── useSocket.ts        # WebSocket connection hook
+│   │   └── index.css               # Tailwind + custom animations
 │   ├── Dockerfile
 │   └── package.json
 ├── monitoring/
@@ -321,6 +371,8 @@ demo/
 │   └── grafana/
 │       ├── provisioning/       # Datasources & dashboards
 │       └── dashboards/         # JSON definitions
+├── docs/
+│   └── ARCHITECTURE.md         # Technical documentation
 └── scripts/
     └── setup-vps.sh            # VPS deployment script
 ```
@@ -333,17 +385,30 @@ demo/
 - ✅ Combined controller + broker nodes
 - ✅ Faster metadata propagation
 
+### Interactive UI Controls
+| Control | Description |
+|---------|-------------|
+| **Start/Stop Data Feed** | Bật/tắt auto-producer |
+| **Partition Distribution** | 3 sliders điều chỉnh tỷ lệ P0/P1/P2 |
+| **Manual Event Injection** | Gửi message với partition targeting |
+| **Consumer Seek** | Click Consumer node để reset offset |
+| **Pause Stream** | Tạm dừng live update để đọc logs |
+
 ### Multi-Partition Demo
 - 3 partitions per topic
-- Round-robin distribution
+- **Weighted distribution** - điều chỉnh tỷ lệ phân phối qua UI
+- **Partition targeting** - gửi message tới partition cụ thể
 - Parallel consumer processing
 - Consumer group coordination
 
 ### Real-time Visualization
 - WebSocket live streaming
-- Message flow animation
+- **Laser beam animation** - hiệu ứng tia laser với particles
+- **Glowing edges** - đường kết nối phát sáng khi có message
+- **Color-coded consumers** - Cyan/Amber/Pink cho từng consumer
 - Partition-level metrics
 - Consumer lag monitoring
+- **Consumer offset seek** - replay messages từ bất kỳ offset
 
 ## 📚 References
 

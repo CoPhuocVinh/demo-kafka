@@ -71,7 +71,13 @@ Dữ liệu đi qua hệ thống theo quy trình khép kín sau:
 4.  **Real-time Delivery (Phân phối):**
     *   Ngay khi nhận message, `ConsumerService` gọi `EventsGateway`.
     *   `EventsGateway` phát sự kiện `kafka-message` qua WebSocket tới tất cả client đang kết nối.
-    *   Frontend nhận sự kiện và render message mới nhất lên `MessageStream` và `ClusterVisualizer` (hiệu ứng tia laser).
+    *   Frontend nhận sự kiện và:
+        - Render message mới lên `MessageStream` (chia theo Consumer columns)
+        - Kích hoạt **hiệu ứng tia laser** trên `ClusterVisualizer`:
+          - Tia laser từ Producer → Partition tương ứng (màu amber)
+          - Tia laser từ Partition → Consumer tương ứng (cyan/amber/pink)
+          - Animation particle chạy dọc theo đường kết nối
+          - Glowing effect phát sáng trong 500ms
 
 5.  **Monitoring (Giám sát):**
     *   Song song với xử lý, `MetricsService` ghi nhận các con số: `messages_produced`, `messages_consumed`, `latency`.
@@ -83,16 +89,58 @@ Dữ liệu đi qua hệ thống theo quy trình khép kín sau:
 
 ### 1. Backend Logic
 *   **Dynamic Partitioning:** Backend định nghĩa 3 broker và topic có 3 partition. Việc này cho phép demo khả năng scale-out.
+*   **Weighted Distribution:** Hỗ trợ cấu hình tỷ lệ phân phối messages vào các partition thông qua `partitionWeights` array. Ví dụ: `[5, 3, 2]` = 50% P0, 30% P1, 20% P2.
+*   **Partition Targeting:** API `/demo/send` hỗ trợ parameter `partition` để gửi message trực tiếp tới partition cụ thể, hoặc `null` để sử dụng weighted random.
 *   **Consumer Seek:** API `/demo/seek` cho phép Admin reset offset của một Consumer Group về 0 hoặc một vị trí bất kỳ để replay lại dữ liệu.
 *   **Singleton Producer:** `ProducerService` được khởi tạo dạng Singleton để tối ưu connection tới Kafka cluster.
 *   **Parallel Consumption:** `ConsumerService` khởi tạo nhiều instance consumer chạy song song (trong code demo dùng vòng lặp để tạo 3 consumer `Consumer-1`, `Consumer-2`, `Consumer-3` trong cùng 1 process để mô phỏng).
 
 ### 2. Frontend Logic
 *   **Visualizer Engine:** Sử dụng `React Flow` để vẽ sơ đồ node.
-    *   **Custom Nodes:** Các node Consumer, Broker được customize để hiển thị trạng thái active (nhấp nháy khi có data).
-    *   **Interactive Edge:** Dây nối giữa các node có animation chạy khi có message đi qua.
+    *   **Custom Nodes:** 
+        - `SimpleNode`: Producer và Consumer nodes với Handle components để kết nối edges
+        - `PartitionStrip`: Hiển thị offset strip với 6 ô offset gần nhất
+        - `GroupNode`: Container node cho Topic và Consumer Group
+    *   **Laser Edge Effect:** Custom edge component `LaserEdge` với:
+        - Base path: Đường line cơ bản luôn hiển thị (opacity thấp)
+        - Glow layer: Khi active, hiển thị đường với drop-shadow effect
+        - Animated particles: 2 hạt sáng (SVG circle) chạy dọc theo path sử dụng `<animateMotion>`
+        - Color coding: Amber cho Producer edges, Cyan/Amber/Pink cho Consumer edges
+    *   **Interactive Consumer:** Click vào Consumer node để mở popup Seek Offset
+*   **Control Panel:**
+    *   **Partition Distribution:** 3 sliders để điều chỉnh weighted distribution
+    *   **Manual Event Injection:** Input + Partition selector (Auto/P0/P1/P2)
+    *   **Activity Log:** Hiển thị 5 actions gần nhất
 *   **WebSocket Hook:** Sử dụng Custom Hook `useSocket` để quản lý kết nối, tự động reconnect khi mất mạng.
-*   **State Management:** Dữ liệu message được lưu trong React State (giới hạn 50-100 message cuối) để tránh tràn bộ nhớ trình duyệt.
+*   **State Management:** Dữ liệu message được lưu trong React State (giới hạn 50 message cuối) để tránh tràn bộ nhớ trình duyệt.
+
+---
+
+## 🌐 API Endpoints
+
+### Demo Controller (`/demo`)
+
+| Method | Endpoint | Body | Description |
+|--------|----------|------|-------------|
+| `GET` | `/demo/statistics` | - | Lấy thống kê: `totalMessagesProduced`, `isProducing`, `partitionWeights` |
+| `POST` | `/demo/start` | - | Bắt đầu auto-producer (gửi message mỗi 2s) |
+| `POST` | `/demo/stop` | - | Dừng auto-producer |
+| `POST` | `/demo/config` | `{ partitionWeights: [5,3,2] }` | Cập nhật tỷ lệ phân phối partition |
+| `POST` | `/demo/send` | `{ message: "...", partition?: 0\|1\|2 }` | Gửi message thủ công. `partition` optional, nếu không set sẽ dùng weighted random |
+| `POST` | `/demo/seek` | `{ consumerId: "Consumer-1", offset: "0" }` | Reset offset của consumer về vị trí chỉ định |
+
+### Metrics Controller (`/metrics`)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/metrics` | Prometheus metrics endpoint |
+
+### WebSocket Events
+
+| Event | Direction | Payload | Description |
+|-------|-----------|---------|-------------|
+| `kafka-message` | Server → Client | `{ topic, partition, offset, value, timestamp, consumerId }` | Message mới từ Kafka |
+| `clients-update` | Server → Client | `{ totalClients: number }` | Cập nhật số lượng clients đang kết nối |
 
 ---
 
