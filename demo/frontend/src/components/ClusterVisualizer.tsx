@@ -7,9 +7,91 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
+  getBezierPath,
+  EdgeProps,
+  Handle,
+  Position,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Zap, User, X, Search } from 'lucide-react';
+
+// Custom Laser Edge Component
+const LaserEdge = ({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  style = {},
+  data,
+}: EdgeProps) => {
+  const [edgePath] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+
+  const isActive = data?.isActive;
+  const laserColor = data?.laserColor || '#f59e0b';
+
+  return (
+    <>
+      {/* Base path - always visible */}
+      <path
+        id={id}
+        className="react-flow__edge-path"
+        d={edgePath}
+        style={{
+          ...style,
+          strokeWidth: isActive ? 2 : 1,
+          stroke: isActive ? laserColor : (style.stroke || '#475569'),
+          opacity: isActive ? 0.6 : 0.3,
+          transition: 'all 0.2s ease',
+        }}
+        fill="none"
+      />
+      
+      {/* Laser beam effect - only when active */}
+      {isActive && (
+        <>
+          {/* Glow layer */}
+          <path
+            d={edgePath}
+            fill="none"
+            style={{
+              stroke: laserColor,
+              strokeWidth: 4,
+              filter: `drop-shadow(0 0 6px ${laserColor}) drop-shadow(0 0 12px ${laserColor})`,
+              opacity: 0.8,
+            }}
+          />
+          
+          {/* Animated laser particle */}
+          <circle r="6" fill={laserColor} style={{ filter: `drop-shadow(0 0 8px ${laserColor}) drop-shadow(0 0 16px ${laserColor})` }}>
+            <animateMotion dur="0.4s" repeatCount="1" fill="freeze">
+              <mpath href={`#${id}`} />
+            </animateMotion>
+            <animate attributeName="opacity" values="1;1;0" dur="0.4s" fill="freeze" />
+            <animate attributeName="r" values="6;8;4" dur="0.4s" fill="freeze" />
+          </circle>
+          
+          {/* Second particle for trail effect */}
+          <circle r="4" fill="white" style={{ filter: `drop-shadow(0 0 4px white)` }}>
+            <animateMotion dur="0.4s" repeatCount="1" fill="freeze" begin="0.05s">
+              <mpath href={`#${id}`} />
+            </animateMotion>
+            <animate attributeName="opacity" values="0.8;0.8;0" dur="0.35s" fill="freeze" begin="0.05s" />
+          </circle>
+        </>
+      )}
+    </>
+  );
+};
 
 const PartitionStrip = ({ data, pulsing }: any) => {
   const currentMax = data.latestOffset ?? 0;
@@ -18,12 +100,24 @@ const PartitionStrip = ({ data, pulsing }: any) => {
   
   return (
     <div className={`
-       rounded-xl border-2 transition-all duration-300 min-w-[280px] bg-slate-950/90
+       rounded-xl border-2 transition-all duration-300 min-w-[280px] bg-slate-950/90 relative
        ${pulsing 
          ? 'border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.3)] ring-1 ring-amber-500/50' 
          : 'border-slate-800 shadow-lg'
        }
     `}>
+      {/* React Flow Handles */}
+      <Handle 
+        type="target" 
+        position={Position.Left} 
+        className="!w-3 !h-3 !bg-amber-500 !border-2 !border-slate-900"
+      />
+      <Handle 
+        type="source" 
+        position={Position.Right} 
+        className="!w-3 !h-3 !bg-amber-500 !border-2 !border-slate-900"
+      />
+      
       <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-900/50 rounded-t-xl">
          <span className={`text-xs font-bold font-mono ${pulsing ? 'text-amber-400' : 'text-slate-400'}`}>
            {data.label}
@@ -47,18 +141,15 @@ const PartitionStrip = ({ data, pulsing }: any) => {
             ))}
          </div>
       </div>
-       
-      <div className="absolute -left-1 top-1/2 w-2 h-2 rounded-full bg-slate-500/50" />
-      <div className="absolute -right-1 top-1/2 w-2 h-2 rounded-full bg-slate-500/50" />
     </div>
   );
 };
 
-const SimpleNode = ({ data, icon: Icon, color, pulsing, onClick }: any) => (
+const SimpleNode = ({ data, icon: Icon, color, pulsing, onClick, isSource, isTarget }: any) => (
   <div 
     onClick={onClick}
     className={`
-    px-4 py-3 rounded-xl border-2 shadow-xl backdrop-blur-md transition-all duration-300 min-w-[140px] bg-slate-950/90 group cursor-pointer
+    px-4 py-3 rounded-xl border-2 shadow-xl backdrop-blur-md transition-all duration-300 min-w-[140px] bg-slate-950/90 group cursor-pointer relative
     ${pulsing ? 'scale-105' : ''}
     hover:ring-2 hover:ring-white/20
   `}
@@ -66,6 +157,24 @@ const SimpleNode = ({ data, icon: Icon, color, pulsing, onClick }: any) => (
     borderColor: pulsing ? color : '#1e293b',
     boxShadow: pulsing ? `0 0 20px -5px ${color}40` : 'none'
   }}>
+    {/* React Flow Handles */}
+    {isTarget && (
+      <Handle 
+        type="target" 
+        position={Position.Left} 
+        className="!w-3 !h-3 !border-2 !border-slate-900"
+        style={{ background: color }}
+      />
+    )}
+    {isSource && (
+      <Handle 
+        type="source" 
+        position={Position.Right} 
+        className="!w-3 !h-3 !border-2 !border-slate-900"
+        style={{ background: color }}
+      />
+    )}
+    
     <div className="flex flex-col items-center gap-2">
       <div className={`p-2 rounded-lg bg-slate-900/50 ${pulsing ? 'animate-bounce' : ''} group-hover:bg-slate-800 transition-colors`}>
         <Icon className="w-5 h-5" style={{ color }} />
@@ -73,8 +182,6 @@ const SimpleNode = ({ data, icon: Icon, color, pulsing, onClick }: any) => (
       <div className="font-bold text-slate-200 text-sm">{data.label}</div>
       {data.subLabel && <div className="text-[10px] text-slate-500">{data.subLabel}</div>}
     </div>
-    <div className="absolute -right-1 top-1/2 w-2 h-2 rounded-full bg-slate-600" />
-    <div className="absolute -left-1 top-1/2 w-2 h-2 rounded-full bg-slate-600" />
   </div>
 );
 
@@ -186,15 +293,15 @@ const initialNodes: Node[] = [
 ];
 
 const initialEdges: Edge[] = [
-  // Producer -> Partitions
-  { id: 'e-prod-p0', source: 'producer', target: 'p0', animated: false, style: { stroke: '#475569', strokeWidth: 1 } },
-  { id: 'e-prod-p1', source: 'producer', target: 'p1', animated: false, style: { stroke: '#475569', strokeWidth: 1 } },
-  { id: 'e-prod-p2', source: 'producer', target: 'p2', animated: false, style: { stroke: '#475569', strokeWidth: 1 } },
+  // Producer -> Partitions (using custom laser edge)
+  { id: 'e-prod-p0', source: 'producer', target: 'p0', type: 'laser', data: { isActive: false, laserColor: '#f59e0b' }, style: { stroke: '#475569' } },
+  { id: 'e-prod-p1', source: 'producer', target: 'p1', type: 'laser', data: { isActive: false, laserColor: '#f59e0b' }, style: { stroke: '#475569' } },
+  { id: 'e-prod-p2', source: 'producer', target: 'p2', type: 'laser', data: { isActive: false, laserColor: '#f59e0b' }, style: { stroke: '#475569' } },
 
-  // Partitions -> Consumers
-  { id: 'e-p0-c1', source: 'p0', target: 'c1', animated: true, style: { stroke: '#22d3ee', opacity: 0.3 } },
-  { id: 'e-p1-c2', source: 'p1', target: 'c2', animated: true, style: { stroke: '#fbbf24', opacity: 0.3 } },
-  { id: 'e-p2-c3', source: 'p2', target: 'c3', animated: true, style: { stroke: '#f472b6', opacity: 0.3 } },
+  // Partitions -> Consumers (using custom laser edge)
+  { id: 'e-p0-c1', source: 'p0', target: 'c1', type: 'laser', data: { isActive: false, laserColor: '#22d3ee' }, style: { stroke: '#22d3ee' } },
+  { id: 'e-p1-c2', source: 'p1', target: 'c2', type: 'laser', data: { isActive: false, laserColor: '#fbbf24' }, style: { stroke: '#fbbf24' } },
+  { id: 'e-p2-c3', source: 'p2', target: 'c3', type: 'laser', data: { isActive: false, laserColor: '#f472b6' }, style: { stroke: '#f472b6' } },
 ];
 
 const VisualizerContent = ({ isProducing, latestMessage }: any) => {
@@ -245,29 +352,37 @@ const VisualizerContent = ({ isProducing, latestMessage }: any) => {
         }));
     }
 
+    // Activate laser effect on relevant edges
     setEdges((eds) => eds.map(e => {
+        // Producer -> Partition edges
         if (e.source === 'producer') {
-           return e.target === partitionIdStr 
-             ? { ...e, animated: true, style: { ...e.style, stroke: '#f59e0b', strokeWidth: 2, opacity: 1 } }
-             : { ...e, animated: false, style: { ...e.style, stroke: '#475569', strokeWidth: 1, opacity: 0.5 } };
+           const isTargetPartition = e.target === partitionIdStr;
+           return { 
+             ...e, 
+             data: { ...e.data, isActive: isTargetPartition }
+           };
         }
+        // Partition -> Consumer edges  
         if (e.source === partitionIdStr) {
-             return { ...e, style: { ...e.style, strokeWidth: 2, opacity: 1 }, animated: true };
+           return { 
+             ...e, 
+             data: { ...e.data, isActive: true }
+           };
+        }
+        // Deactivate other partition->consumer edges
+        if (e.source.startsWith('p')) {
+           return { ...e, data: { ...e.data, isActive: false } };
         }
         return e;
     }));
 
+    // Deactivate laser after animation completes
     const timer = setTimeout(() => {
-       setEdges((eds) => eds.map(e => {
-          if (e.source === 'producer') {
-             return { ...e, animated: false, style: { ...e.style, stroke: '#475569', strokeWidth: 1, opacity: 0.5 } };
-          }
-          if (e.source.startsWith('p')) {
-             return { ...e, style: { ...e.style, strokeWidth: 1, opacity: 0.3 } };
-          }
-          return e;
-       }));
-    }, 300);
+       setEdges((eds) => eds.map(e => ({
+         ...e,
+         data: { ...e.data, isActive: false }
+       })));
+    }, 500);
 
     return () => clearTimeout(timer);
   }, [latestMessage, setEdges]);
@@ -288,7 +403,7 @@ const VisualizerContent = ({ isProducing, latestMessage }: any) => {
   }, [partitionHighWatermarks, setNodes]);
 
   const nodeTypes = useMemo(() => ({
-    simpleInput: (props: any) => <SimpleNode {...props} icon={Zap} color="#6366f1" pulsing={isProducing} />,
+    simpleInput: (props: any) => <SimpleNode {...props} icon={Zap} color="#6366f1" pulsing={isProducing} isSource={true} isTarget={false} />,
     simpleOutput: (props: any) => {
        const pId = `p${latestMessage?.partition}`;
        const myId = props.id;
@@ -301,6 +416,8 @@ const VisualizerContent = ({ isProducing, latestMessage }: any) => {
            icon={User} 
            color={color} 
            pulsing={isMyPartition} 
+           isSource={false}
+           isTarget={true}
            onClick={() => setSeekTarget({ id: myId, label: props.data.label })}
          />
        );
@@ -311,6 +428,11 @@ const VisualizerContent = ({ isProducing, latestMessage }: any) => {
     },
     groupContainer: GroupNode,
   }), [isProducing, latestMessage]);
+
+  // Edge types with laser animation
+  const edgeTypes = useMemo(() => ({
+    laser: LaserEdge,
+  }), []);
 
   // Helper to get offsets for popup
   const getStatsForPopup = (target: any) => {
@@ -333,6 +455,7 @@ const VisualizerContent = ({ isProducing, latestMessage }: any) => {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         fitView

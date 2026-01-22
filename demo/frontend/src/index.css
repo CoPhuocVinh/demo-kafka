@@ -45,3 +45,60 @@
   66% { transform: translate(-20px, 20px) scale(0.9); }
   100% { transform: translate(0px, 0px) scale(1); }
 }
+
+/* Laser beam animation */
+@keyframes laser-beam {
+  0% {
+    stroke-dashoffset: 100%;
+    opacity: 1;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0%;
+    opacity: 0.3;
+  }
+}
+
+@keyframes laser-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px currentColor) drop-shadow(0 0 4px currentColor);
+  }
+  50% {
+    filter: drop-shadow(0 0 6px currentColor) drop-shadow(0 0 12px currentColor) drop-shadow(0 0 20px currentColor);
+  }
+}
+
+@keyframes laser-pulse {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 100;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    stroke-dashoffset: -100;
+  }
+}
+
+.react-flow__edge-path.laser-active {
+  animation: laser-glow 0.3s ease-in-out;
+}
+
+.laser-particle {
+  animation: laser-pulse 0.5s ease-out forwards;
+}
+
+/* Custom edge styles for laser effect */
+.react-flow__edge.laser-firing .react-flow__edge-path {
+  stroke-width: 3 !important;
+  filter: drop-shadow(0 0 4px var(--laser-color, #f59e0b)) 
+          drop-shadow(0 0 8px var(--laser-color, #f59e0b))
+          drop-shadow(0 0 12px var(--laser-color, #f59e0b));
+}
