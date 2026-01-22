@@ -404,7 +404,8 @@ get_registration_token() {
         -H "X-GitHub-Api-Version: 2022-11-28" \
         "$API_URL")
     
-    TOKEN=$(echo "$RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+    # Parse token - handle both "token":"xxx" and "token": "xxx" formats
+    TOKEN=$(echo "$RESPONSE" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
     
     if [ -z "$TOKEN" ]; then
         print_error "Failed to get registration token"
@@ -419,7 +420,7 @@ get_registration_token() {
     fi
     
     REGISTRATION_TOKEN="$TOKEN"
-    print_success "Got registration token"
+    print_success "Got registration token (expires at $(echo "$RESPONSE" | grep -o '"expires_at"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/' | cut -d'T' -f1,2 | tr 'T' ' '))"
 }
 
 # Download and extract runner
@@ -648,7 +649,7 @@ uninstall_runner() {
                         -H "X-GitHub-Api-Version: 2022-11-28" \
                         "$API_URL")
                     
-                    REMOVE_TOKEN=$(echo "$RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+                    REMOVE_TOKEN=$(echo "$RESPONSE" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
                     
                     if [ -n "$REMOVE_TOKEN" ]; then
                         ./config.sh remove --token "$REMOVE_TOKEN"
