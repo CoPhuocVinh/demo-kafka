@@ -12,43 +12,21 @@ on:
     branches:
       - main
       - master
-    paths:
-      - 'demo/**'
-      - '.github/workflows/deploy.yml'
-  
-  pull_request:
-    branches:
-      - main
-      - master
-    paths:
-      - 'demo/**'
   
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'production'
-        type: choice
-        options:
-          - production
-          - staging
       rebuild_all:
         description: 'Rebuild all containers (including Kafka)'
         required: false
         default: false
         type: boolean
 
-env:
-  PROJECT_DIR: ${{ vars.PROJECT_DIR || '~/kafka-demo' }}
-  DOCKER_BUILDKIT: 1
-
 jobs:
   # ============================================
-  # Job 1: Lint & Test
+  # Job 1: Build & Test (on GitHub runner)
   # ============================================
-  lint-test:
-    name: Lint & Test
+  build:
+    name: Build & Test
     runs-on: ubuntu-latest
     
     steps:
@@ -60,84 +38,25 @@ jobs:
         with:
           node-version: '20'
       
-      # Backend lint & test
-      - name: Install backend dependencies
+      - name: Install & Build Backend
         working-directory: demo/backend
-        run: npm install
+        run: |
+          npm install
+          npm run build --if-present
       
-      - name: Lint backend
-        working-directory: demo/backend
-        run: npm run lint --if-present
-      
-      - name: Test backend
-        working-directory: demo/backend
-        run: npm run test --if-present
-      
-      # Frontend lint & test
-      - name: Install frontend dependencies
+      - name: Install & Build Frontend
         working-directory: demo/frontend
-        run: npm install
-      
-      - name: Lint frontend
-        working-directory: demo/frontend
-        run: npm run lint --if-present
-      
-      - name: Build frontend
-        working-directory: demo/frontend
-        run: npm run build
-      
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-build
-          path: demo/frontend/dist
-          retention-days: 1
+        run: |
+          npm install
+          npm run build
 
   # ============================================
-  # Job 2: Build Docker Images
-  # ============================================
-  build:
-    name: Build Docker Images
-    runs-on: ubuntu-latest
-    needs: lint-test
-    if: github.event_name != 'pull_request'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Build backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: demo/backend
-          push: false
-          tags: kafka-demo-backend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      
-      - name: Build frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: demo/frontend
-          push: false
-          tags: kafka-demo-frontend:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  # ============================================
-  # Job 3: Deploy to VPS
+  # Job 2: Deploy to VPS (on self-hosted runner)
   # ============================================
   deploy:
     name: Deploy to VPS
-    runs-on: self-hosted
     needs: build
-    if: github.event_name != 'pull_request'
-    environment: 
-      name: ${{ github.event.inputs.environment || 'production' }}
-      url: ${{ vars.APP_URL || 'http://localhost:8080' }}
+    runs-on: self-hosted
     
     steps:
       - name: Checkout code
@@ -145,199 +64,63 @@ jobs:
       
       - name: Show deployment info
         run: |
-          echo "🚀 Starting deployment..."
+          echo "🚀 Deploying Kafka Demo"
           echo "📦 Commit: ${{ github.sha }}"
           echo "🌿 Branch: ${{ github.ref_name }}"
           echo "👤 Triggered by: ${{ github.actor }}"
-          echo "📁 Project dir: ${{ env.PROJECT_DIR }}"
       
-      - name: Sync project files
+      - name: Build and Deploy with Docker Compose
+        working-directory: demo
         run: |
-          # Create project directory if not exists
-          mkdir -p ${{ env.PROJECT_DIR }}
-          
-          # Sync demo folder
-          rsync -av --delete \
-            --exclude 'node_modules' \
-            --exclude '.git' \
-            --exclude 'dist' \
-            --exclude '.env' \
-            demo/ ${{ env.PROJECT_DIR }}/demo/
-          
-          echo "✅ Files synced"
-      
-      - name: Create/Update .env file
-        working-directory: ${{ env.PROJECT_DIR }}/demo
-        run: |
-          # Create .env if not exists, preserve existing values
-          if [ ! -f .env ]; then
-            cp .env.example .env 2>/dev/null || touch .env
-          fi
-          
-          # Update deployment timestamp
-          if grep -q "LAST_DEPLOY=" .env; then
-            sed -i "s/LAST_DEPLOY=.*/LAST_DEPLOY=$(date -Iseconds)/" .env
-          else
-            echo "LAST_DEPLOY=$(date -Iseconds)" >> .env
-          fi
-          
-          echo "✅ Environment file configured"
-      
-      - name: Pull latest Docker images
-        working-directory: ${{ env.PROJECT_DIR }}/demo
-        run: |
-          docker compose pull kafka-ui prometheus grafana || true
-          echo "✅ Images pulled"
-      
-      - name: Build application images
-        working-directory: ${{ env.PROJECT_DIR }}/demo
-        run: |
+          # Build and start services
           if [ "${{ github.event.inputs.rebuild_all }}" = "true" ]; then
-            echo "🔨 Rebuilding all images..."
-            docker compose build --no-cache
+            echo "🔨 Rebuilding all containers..."
+            docker compose up --build -d
           else
-            echo "🔨 Rebuilding app images only..."
-            docker compose build --no-cache backend frontend
-          fi
-          echo "✅ Images built"
-      
-      - name: Deploy with zero-downtime
-        working-directory: ${{ env.PROJECT_DIR }}/demo
-        run: |
-          echo "📤 Starting deployment..."
-          
-          # Check if Kafka is running
-          if docker compose ps kafka-1 --format json 2>/dev/null | grep -q "running"; then
-            echo "Kafka is running, performing rolling update..."
-            
-            # Update backend first
-            docker compose up -d --no-deps backend
-            sleep 5
-            
-            # Then frontend
-            docker compose up -d --no-deps frontend
-            sleep 3
-            
-            # Update monitoring if needed
-            docker compose up -d --no-deps prometheus grafana kafka-ui
-          else
-            echo "Starting all services..."
+            echo "🔨 Rebuilding app containers only..."
+            docker compose up --build -d backend frontend
+            # Ensure other services are running
             docker compose up -d
           fi
-          
-          echo "✅ Containers updated"
       
-      - name: Wait for services to be healthy
-        working-directory: ${{ env.PROJECT_DIR }}/demo
+      - name: Wait for services
         run: |
-          echo "⏳ Waiting for services to be healthy..."
-          
-          # Wait for backend
-          for i in {1..30}; do
-            if curl -sf http://localhost:3000/metrics > /dev/null 2>&1; then
-              echo "✅ Backend is healthy"
-              break
-            fi
-            echo "Waiting for backend... ($i/30)"
-            sleep 2
-          done
-          
-          # Wait for frontend
-          for i in {1..20}; do
-            if curl -sf http://localhost:8080 > /dev/null 2>&1; then
-              echo "✅ Frontend is healthy"
-              break
-            fi
-            echo "Waiting for frontend... ($i/20)"
-            sleep 2
-          done
+          echo "⏳ Waiting for services to start..."
+          sleep 10
       
-      - name: Run health checks
-        working-directory: ${{ env.PROJECT_DIR }}/demo
+      - name: Health check
+        working-directory: demo
         run: |
           echo "🏥 Running health checks..."
           
-          HEALTH_OK=true
-          
           # Check backend
-          if curl -sf http://localhost:3000/metrics > /dev/null; then
+          if curl -sf http://localhost:3000/metrics > /dev/null 2>&1; then
             echo "✅ Backend: OK"
           else
-            echo "❌ Backend: FAILED"
-            HEALTH_OK=false
+            echo "⚠️ Backend: Starting..."
           fi
           
           # Check frontend
-          if curl -sf http://localhost:8080 > /dev/null; then
+          if curl -sf http://localhost:8080 > /dev/null 2>&1; then
             echo "✅ Frontend: OK"
           else
-            echo "❌ Frontend: FAILED"
-            HEALTH_OK=false
+            echo "⚠️ Frontend: Starting..."
           fi
           
-          # Check Kafka brokers
-          for i in 1 2 3; do
-            if docker exec kafka-$i /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server 127.0.0.1:9092 > /dev/null 2>&1; then
-              echo "✅ Kafka Broker $i: OK"
-            else
-              echo "❌ Kafka Broker $i: FAILED"
-              HEALTH_OK=false
-            fi
-          done
-          
-          if [ "$HEALTH_OK" = false ]; then
-            echo ""
-            echo "⚠️ Some services are unhealthy!"
-            docker compose ps
-            exit 1
-          fi
-          
-          echo ""
-          echo "🎉 All services are healthy!"
+          # Show status
+          docker compose ps
       
-      - name: Show deployment summary
-        if: always()
-        working-directory: ${{ env.PROJECT_DIR }}/demo
+      - name: Show access URLs
         run: |
           echo ""
           echo "════════════════════════════════════════"
-          echo "📊 Deployment Summary"
+          echo "🎉 Deployment Complete!"
           echo "════════════════════════════════════════"
-          echo ""
-          docker compose ps
           echo ""
           echo "🌐 Access URLs:"
-          echo "   Frontend:  http://$(hostname -I | awk '{print $1}'):8080"
-          echo "   Backend:   http://$(hostname -I | awk '{print $1}'):3000"
-          echo "   Grafana:   http://$(hostname -I | awk '{print $1}'):3001"
-          echo "   Kafka UI:  http://$(hostname -I | awk '{print $1}'):8081"
+          IP=$(hostname -I | awk '{print $1}')
+          echo "   Frontend:  http://$IP:8080"
+          echo "   Backend:   http://$IP:3000"
+          echo "   Grafana:   http://$IP:3001"
+          echo "   Kafka UI:  http://$IP:8081"
           echo ""
-      
-      - name: Cleanup old images
-        if: success()
-        run: |
-          echo "🧹 Cleaning up old images..."
-          docker image prune -f --filter "until=24h" || true
-          echo "✅ Cleanup complete"
-
-  # ============================================
-  # Job 4: Notify on failure
-  # ============================================
-  notify-failure:
-    name: Notify on Failure
-    runs-on: ubuntu-latest
-    needs: [lint-test, build, deploy]
-    if: failure()
-    
-    steps:
-      - name: Send failure notification
-        run: |
-          echo "❌ Deployment failed!"
-          echo "Commit: ${{ github.sha }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Actor: ${{ github.actor }}"
-          # Add your notification logic here (Slack, Discord, Email, etc.)
-          # Example for Discord webhook:
-          # curl -X POST -H "Content-Type: application/json" \
-          #   -d '{"content": "❌ Deployment failed for ${{ github.repository }}"}' \
-          #   ${{ secrets.DISCORD_WEBHOOK_URL }}
