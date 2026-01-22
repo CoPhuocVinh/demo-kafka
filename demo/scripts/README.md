@@ -9,6 +9,7 @@ Thư mục này chứa các scripts để quản lý và vận hành Kafka Demo.
 | Script | Mục đích | Môi trường |
 |--------|----------|------------|
 | `setup-vps.sh` | Cài đặt VPS từ đầu | VPS/Server |
+| `setup-runner.sh` | Cài đặt GitHub Actions Runner | VPS/Server |
 | `dev.sh` | Quản lý nhanh cho development | Local |
 | `prod.sh` | Quản lý đầy đủ cho production | Production |
 
@@ -59,6 +60,91 @@ REPO_URL=git@github.com:user/repo.git ./setup-vps.sh --with-deploy
 |----------|---------|-------|
 | `PROJECT_DIR` | `~/kafka-demo` | Thư mục cài đặt project |
 | `REPO_URL` | _(empty)_ | Git repository URL |
+
+---
+
+## 🤖 setup-runner.sh
+
+Script cài đặt GitHub Actions Self-Hosted Runner trên VPS.
+
+### Tính năng
+- ✅ Tự động download và cài đặt runner
+- ✅ Cấu hình runner với GitHub repository
+- ✅ Cài đặt như systemd service (auto-start on boot)
+- ✅ Hỗ trợ update, uninstall
+
+### Yêu cầu
+- GitHub Personal Access Token với scope `repo`
+- Đã chạy `setup-vps.sh` trước (cần Docker)
+
+### Sử dụng
+
+```bash
+# Kiểm tra trạng thái
+./setup-runner.sh --check
+
+# Cài đặt (interactive)
+./setup-runner.sh
+
+# Cài đặt với environment variables
+GITHUB_REPO_URL=https://github.com/user/repo \
+GITHUB_TOKEN=ghp_xxxx \
+./setup-runner.sh
+
+# Update runner lên version mới nhất
+./setup-runner.sh --update
+
+# Gỡ cài đặt
+./setup-runner.sh --uninstall
+
+# Xem help
+./setup-runner.sh --help
+```
+
+### Options
+
+| Option | Mô tả |
+|--------|-------|
+| `--check` | Kiểm tra trạng thái runner |
+| `--update` | Update runner lên version mới nhất |
+| `--uninstall` | Gỡ cài đặt runner |
+| `--help`, `-h` | Hiển thị help |
+
+### Environment Variables
+
+| Variable | Default | Mô tả |
+|----------|---------|-------|
+| `GITHUB_REPO_URL` | _(required)_ | URL repository GitHub |
+| `GITHUB_TOKEN` | _(required)_ | Personal Access Token |
+| `RUNNER_NAME` | `$(hostname)` | Tên runner |
+| `RUNNER_LABELS` | `self-hosted,linux,x64,vps` | Labels cho runner |
+| `RUNNER_DIR` | `~/actions-runner` | Thư mục cài đặt |
+
+### Cách lấy GitHub Token
+
+1. Vào **GitHub Settings** > **Developer settings** > **Personal access tokens**
+2. Click **Generate new token (classic)**
+3. Chọn scope `repo` (full control of private repositories)
+4. Copy token và sử dụng
+
+### Quản lý Runner Service
+
+```bash
+# Xem trạng thái
+sudo ~/actions-runner/svc.sh status
+
+# Xem logs
+journalctl -u actions.runner.* -f
+
+# Restart runner
+sudo ~/actions-runner/svc.sh restart
+
+# Stop runner
+sudo ~/actions-runner/svc.sh stop
+
+# Start runner
+sudo ~/actions-runner/svc.sh start
+```
 
 ---
 
@@ -292,8 +378,73 @@ Script quản lý đầy đủ cho môi trường production với các tính n�
 
 ---
 
+## 🚀 CI/CD với GitHub Actions
+
+Project có sẵn GitHub Actions workflow tại `.github/workflows/deploy.yml`.
+
+### Workflow Features
+
+- ✅ Lint & Test code trước khi deploy
+- ✅ Build Docker images
+- ✅ Zero-downtime deployment
+- ✅ Health checks sau deploy
+- ✅ Hỗ trợ manual trigger với options
+
+### Trigger
+
+- **Automatic**: Push vào branch `main` hoặc `master` (thay đổi trong folder `demo/`)
+- **Manual**: Workflow dispatch từ GitHub Actions UI
+
+### Setup CI/CD
+
+1. **Setup VPS**:
+   ```bash
+   ./setup-vps.sh --yes
+   ```
+
+2. **Cài đặt GitHub Runner**:
+   ```bash
+   GITHUB_REPO_URL=https://github.com/your-user/kafka \
+   GITHUB_TOKEN=ghp_your_token \
+   ./setup-runner.sh
+   ```
+
+3. **Verify runner** tại:
+   ```
+   https://github.com/your-user/kafka/settings/actions/runners
+   ```
+
+4. **(Optional) Thêm repository variables**:
+   - Vào **Settings** > **Secrets and variables** > **Actions** > **Variables**
+   - Thêm `PROJECT_DIR` nếu khác default (`~/kafka-demo`)
+   - Thêm `APP_URL` cho environment URL
+
+5. **Push code** - workflow sẽ tự động chạy!
+
+### Manual Deploy
+
+```bash
+# Từ GitHub Actions UI:
+# 1. Vào tab Actions
+# 2. Chọn "Deploy Kafka Demo"
+# 3. Click "Run workflow"
+# 4. Chọn options và click "Run workflow"
+```
+
+### Workflow Jobs
+
+| Job | Runner | Mô tả |
+|-----|--------|-------|
+| `lint-test` | `ubuntu-latest` | Lint & test code |
+| `build` | `ubuntu-latest` | Build Docker images |
+| `deploy` | `self-hosted` | Deploy lên VPS |
+| `notify-failure` | `ubuntu-latest` | Notify nếu fail |
+
+---
+
 ## 🔗 Xem Thêm
 
 - [README.md](../README.md) - Tài liệu chính
 - [ARCHITECTURE.md](../docs/ARCHITECTURE.md) - Chi tiết kiến trúc
 - [.env.example](../.env.example) - Cấu hình environment
+- [deploy.yml](../../.github/workflows/deploy.yml) - GitHub Actions workflow
