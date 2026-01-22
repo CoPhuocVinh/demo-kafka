@@ -75,6 +75,74 @@ print_info() {
     echo -e "${CYAN}ℹ️  $1${NC}"
 }
 
+# Setup runner user (must run as root)
+setup_runner_user() {
+    print_header "Setting Up Runner User"
+    
+    if [[ $EUID -ne 0 ]]; then
+        print_error "This command must be run as root!"
+        echo "Usage: sudo $0 --setup-user"
+        exit 1
+    fi
+    
+    RUNNER_USER="${RUNNER_USER:-runner}"
+    
+    echo "This will create user '$RUNNER_USER' with:"
+    echo "  - Home directory: /home/$RUNNER_USER"
+    echo "  - Docker access (docker group)"
+    echo "  - Sudo access (no password required)"
+    echo ""
+    
+    # Check if user exists
+    if id "$RUNNER_USER" &>/dev/null; then
+        print_warning "User '$RUNNER_USER' already exists"
+        read -p "Continue to configure permissions? (y/N) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 0
+        fi
+    else
+        echo "Creating user '$RUNNER_USER'..."
+        useradd -m -s /bin/bash "$RUNNER_USER"
+        print_success "User created"
+    fi
+    
+    # Add to docker group
+    echo "Adding to docker group..."
+    usermod -aG docker "$RUNNER_USER"
+    print_success "Added to docker group"
+    
+    # Setup sudo without password
+    echo "Configuring sudo access..."
+    echo "$RUNNER_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/$RUNNER_USER
+    chmod 440 /etc/sudoers.d/$RUNNER_USER
+    print_success "Sudo configured (no password required)"
+    
+    # Set password (optional)
+    echo ""
+    read -p "Set a password for '$RUNNER_USER'? (y/N) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        passwd "$RUNNER_USER"
+    fi
+    
+    print_header "User Setup Complete!"
+    
+    echo "Now switch to the runner user and run the setup:"
+    echo ""
+    echo -e "  ${CYAN}# Switch to runner user${NC}"
+    echo -e "  ${GREEN}su - $RUNNER_USER${NC}"
+    echo ""
+    echo -e "  ${CYAN}# Clone your repository${NC}"
+    echo -e "  ${GREEN}git clone https://github.com/YOUR_USER/YOUR_REPO.git ~/YOUR_REPO${NC}"
+    echo ""
+    echo -e "  ${CYAN}# Run the setup script${NC}"
+    echo -e "  ${GREEN}cd ~/YOUR_REPO/demo/scripts${NC}"
+    echo -e "  ${GREEN}GITHUB_REPO_URL=https://github.com/YOUR_USER/YOUR_REPO \\\\${NC}"
+    echo -e "  ${GREEN}GITHUB_TOKEN=ghp_xxx ./setup-runner.sh${NC}"
+    echo ""
+}
+
 # Show help
 show_help() {
     echo "GitHub Actions Self-Hosted Runner Setup Script"
@@ -82,6 +150,7 @@ show_help() {
     echo "Usage: $0 [options]"
     echo ""
     echo "Options:"
+    echo "  --setup-user     Create and configure runner user (run as root)"
     echo "  --check          Check status of all runners"
     echo "  --list           List all installed runners"
     echo "  --uninstall      Remove a runner (interactive selection)"
@@ -146,17 +215,21 @@ check_requirements() {
         echo ""
         echo "GitHub Actions runner must run as a non-root user for security reasons."
         echo ""
-        echo "Please create a dedicated user and run the script again:"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${CYAN}  QUICK SETUP (recommended)${NC}"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
         echo ""
-        echo -e "  ${CYAN}# Create runner user${NC}"
-        echo -e "  ${GREEN}sudo useradd -m -s /bin/bash runner${NC}"
-        echo -e "  ${GREEN}sudo usermod -aG docker runner${NC}"
+        echo -e "  ${CYAN}Step 1: Create runner user (as root)${NC}"
+        echo -e "  ${GREEN}$0 --setup-user${NC}"
         echo ""
-        echo -e "  ${CYAN}# Switch to runner user${NC}"
-        echo -e "  ${GREEN}sudo su - runner${NC}"
+        echo -e "  ${CYAN}Step 2: Switch to runner user${NC}"
+        echo -e "  ${GREEN}su - runner${NC}"
         echo ""
-        echo -e "  ${CYAN}# Then run this script again${NC}"
-        echo -e "  ${GREEN}GITHUB_REPO_URL=... GITHUB_TOKEN=... ./setup-runner.sh${NC}"
+        echo -e "  ${CYAN}Step 3: Clone repo & run setup${NC}"
+        echo -e "  ${GREEN}git clone https://github.com/USER/REPO.git ~/REPO${NC}"
+        echo -e "  ${GREEN}cd ~/REPO/demo/scripts${NC}"
+        echo -e "  ${GREEN}GITHUB_REPO_URL=https://github.com/USER/REPO \\\\${NC}"
+        echo -e "  ${GREEN}GITHUB_TOKEN=ghp_xxx ./setup-runner.sh${NC}"
         echo ""
         exit 1
     fi
@@ -897,8 +970,12 @@ print_summary() {
 main() {
     # Parse arguments
     case "${1:-}" in
+        --setup-user)
+            setup_runner_user
+            exit 0
+            ;;
         --check)
-            check_requirements
+            # Allow root for check/list operations
             check_runner_status
             exit 0
             ;;

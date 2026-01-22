@@ -68,82 +68,102 @@ REPO_URL=git@github.com:user/repo.git ./setup-vps.sh --with-deploy
 Script cài đặt GitHub Actions Self-Hosted Runner trên VPS.
 
 ### Tính năng
+- ✅ Tự động tạo user runner với đầy đủ quyền
 - ✅ Tự động download và cài đặt runner
 - ✅ Cấu hình runner với GitHub repository
 - ✅ Cài đặt như systemd service (auto-start on boot)
-- ✅ Hỗ trợ update, uninstall
+- ✅ Hỗ trợ nhiều runners cho nhiều repos
+- ✅ Hỗ trợ Organization runner
 
 ### Yêu cầu
 - GitHub Personal Access Token với scope `repo`
 - Đã chạy `setup-vps.sh` trước (cần Docker)
 
-### Sử dụng
+### Quick Start (3 bước)
 
 ```bash
-# Kiểm tra trạng thái
-./setup-runner.sh --check
+# Bước 1: Tạo user runner (chạy với root)
+./setup-runner.sh --setup-user
 
-# Cài đặt (interactive)
-./setup-runner.sh
+# Bước 2: Chuyển sang user runner
+su - runner
 
-# Cài đặt với environment variables
-GITHUB_REPO_URL=https://github.com/user/repo \
+# Bước 3: Clone repo và chạy setup
+git clone https://github.com/YOUR_USER/YOUR_REPO.git ~/YOUR_REPO
+cd ~/YOUR_REPO/demo/scripts
+GITHUB_REPO_URL=https://github.com/YOUR_USER/YOUR_REPO \
 GITHUB_TOKEN=ghp_xxxx \
 ./setup-runner.sh
-
-# Update runner lên version mới nhất
-./setup-runner.sh --update
-
-# Gỡ cài đặt
-./setup-runner.sh --uninstall
-
-# Xem help
-./setup-runner.sh --help
 ```
 
 ### Options
 
-| Option | Mô tả |
-|--------|-------|
-| `--check` | Kiểm tra trạng thái runner |
-| `--update` | Update runner lên version mới nhất |
-| `--uninstall` | Gỡ cài đặt runner |
-| `--help`, `-h` | Hiển thị help |
+| Option | Mô tả | Chạy với |
+|--------|-------|----------|
+| `--setup-user` | Tạo và cấu hình user runner | root |
+| `--check` | Kiểm tra trạng thái tất cả runners | any |
+| `--list` | Liệt kê tất cả runners đã cài | any |
+| `--update` | Update runner lên version mới nhất | runner user |
+| `--uninstall` | Gỡ cài đặt runner | runner user |
+| `--help`, `-h` | Hiển thị help | any |
 
 ### Environment Variables
 
 | Variable | Default | Mô tả |
 |----------|---------|-------|
-| `GITHUB_REPO_URL` | _(required)_ | URL repository GitHub |
+| `GITHUB_REPO_URL` | _(required)_ | URL repository hoặc organization |
 | `GITHUB_TOKEN` | _(required)_ | Personal Access Token |
-| `RUNNER_NAME` | `$(hostname)` | Tên runner |
+| `RUNNER_NAME` | `hostname-reponame` | Tên runner |
 | `RUNNER_LABELS` | `self-hosted,linux,x64,vps` | Labels cho runner |
-| `RUNNER_DIR` | `~/actions-runner` | Thư mục cài đặt |
+| `RUNNER_SCOPE` | `repo` | `repo` hoặc `org` |
 
 ### Cách lấy GitHub Token
 
 1. Vào **GitHub Settings** > **Developer settings** > **Personal access tokens**
 2. Click **Generate new token (classic)**
-3. Chọn scope `repo` (full control of private repositories)
+3. Chọn scope `repo` (hoặc `admin:org` cho org runner)
 4. Copy token và sử dụng
+
+### Multi-Runner (nhiều repos)
+
+```bash
+# Runner cho repo 1
+GITHUB_REPO_URL=https://github.com/user/repo1 \
+GITHUB_TOKEN=ghp_xxx ./setup-runner.sh
+
+# Runner cho repo 2
+GITHUB_REPO_URL=https://github.com/user/repo2 \
+GITHUB_TOKEN=ghp_xxx ./setup-runner.sh
+
+# Xem danh sách
+./setup-runner.sh --list
+```
+
+### Cấu trúc thư mục
+
+```
+/home/runner/
+├── demo-kafka/              # Repo clone từ git
+├── actions-runners/         # Runners (tự động tạo)
+│   ├── demo-kafka/          # Runner cho demo-kafka
+│   ├── project-2/           # Runner cho project khác
+│   └── .cache/              # Cache chung
+```
 
 ### Quản lý Runner Service
 
 ```bash
 # Xem trạng thái
-sudo ~/actions-runner/svc.sh status
+./setup-runner.sh --check
+
+# Hoặc trực tiếp
+sudo ~/actions-runners/demo-kafka/svc.sh status
 
 # Xem logs
 journalctl -u actions.runner.* -f
 
 # Restart runner
-sudo ~/actions-runner/svc.sh restart
-
-# Stop runner
-sudo ~/actions-runner/svc.sh stop
-
-# Start runner
-sudo ~/actions-runner/svc.sh start
+sudo ~/actions-runners/demo-kafka/svc.sh restart
 ```
 
 ---
