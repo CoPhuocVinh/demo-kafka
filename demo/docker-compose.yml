@@ -1,4 +1,6 @@
-version: '3.8'
+# Kafka Demo - Docker Compose Configuration
+# Usage: docker compose up -d
+# Docs: See README.md and docs/ARCHITECTURE.md
 
 services:
   # Kafka Broker 1 (Controller + Broker)
@@ -123,7 +125,7 @@ services:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
     ports:
-      - "8081:8080"
+      - "${KAFKA_UI_PORT:-8081}:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: kafka-cluster
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
@@ -146,10 +148,11 @@ services:
       dockerfile: Dockerfile
     container_name: nestjs-backend
     ports:
-      - "3000:3000"
+      - "${BACKEND_PORT:-3000}:3000"
     environment:
-      KAFKA_BROKERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
-      NODE_ENV: production
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka-1:19092,kafka-2:19092,kafka-3:19092}
+      NODE_ENV: ${NODE_ENV:-production}
+      DEMO_PRODUCER_INTERVAL_MS: ${DEMO_PRODUCER_INTERVAL_MS:-2000}
     depends_on:
       kafka-1:
         condition: service_healthy
@@ -168,7 +171,7 @@ services:
       dockerfile: Dockerfile
     container_name: react-frontend
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
       - backend
     networks:
@@ -180,7 +183,7 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
@@ -199,10 +202,10 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - "3001:3000"
+      - "${GRAFANA_PORT:-3001}:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_INSTALL_PLUGINS: grafana-piechart-panel
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning

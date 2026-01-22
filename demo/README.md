@@ -65,16 +65,19 @@ Demo này minh họa:
 ### 1. Clone và Start Services
 
 ```bash
-cd /home/vinhcp/Workspace/test/kafka/demo
+cd kafka-demo/demo
 
-# Copy environment variables
+# Copy environment variables (review và điều chỉnh nếu cần)
 cp .env.example .env
 
 # Start all services
-docker-compose up -d
+docker compose up -d
+
+# Hoặc sử dụng helper script
+./scripts/dev.sh start
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### 2. Access các Services
@@ -199,7 +202,7 @@ await this.startConsumer({
 });
 ```
 
-## 🌐 VPS Deployment (Ubuntu 24.04)
+## 🌐 VPS Deployment (Ubuntu 22.04/24.04)
 
 ### Automated Setup
 
@@ -207,52 +210,61 @@ await this.startConsumer({
 # SSH to VPS
 ssh user@your-vps-ip
 
-# Download setup script
-wget https://raw.githubusercontent.com/YOUR_REPO/scripts/setup-vps.sh
+# Clone project
+git clone YOUR_REPO kafka-demo
+cd kafka-demo/demo
 
-# Make executable
-chmod +x setup-vps.sh
+# Run setup script (installs Docker, configures system, firewall)
+./scripts/setup-vps.sh
 
-# Run setup
-./setup-vps.sh
+# Or with auto-deploy
+REPO_URL=YOUR_REPO ./scripts/setup-vps.sh --with-deploy
 ```
+
+**Script sẽ tự động:**
+- ✅ Kiểm tra system requirements (RAM, disk)
+- ✅ Cài đặt Docker & Docker Compose
+- ✅ Cấu hình system limits cho Kafka
+- ✅ Cấu hình UFW firewall
+- ✅ Thêm user vào docker group
 
 ### Manual Setup
 
 ```bash
 # 1. Install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
 
-# 2. Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
-  -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-
-# 3. Configure system limits for Kafka
+# 2. Configure system limits for Kafka
 sudo tee -a /etc/sysctl.conf <<EOF
 vm.max_map_count=262144
 fs.file-max=65536
 EOF
 sudo sysctl -p
 
-# 4. Clone project
+# 3. Clone project
 git clone YOUR_REPO kafka-demo
 cd kafka-demo/demo
 
+# 4. Setup environment
+cp .env.example .env
+# Edit .env if needed
+
 # 5. Start services
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Firewall Rules
 
+Script tự động cấu hình, hoặc manual:
+
 ```bash
-# Allow necessary ports
 sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 8080/tcp  # Frontend
 sudo ufw allow 3000/tcp  # Backend
 sudo ufw allow 3001/tcp  # Grafana
-sudo ufw allow 8080/tcp  # Frontend
 sudo ufw allow 8081/tcp  # Kafka UI
+sudo ufw allow 9090/tcp  # Prometheus
 sudo ufw enable
 ```
 
@@ -280,6 +292,49 @@ websocket_active_connections
 2. **Message Throughput**: Messages/sec, bytes/sec per topic
 3. **Consumer Lag**: Lag monitoring cho từng partition
 4. **Application Metrics**: Backend performance, WebSocket connections
+
+## 🔧 Operations Scripts
+
+### Development (`./scripts/dev.sh`)
+
+```bash
+./scripts/dev.sh start      # Start all services
+./scripts/dev.sh stop       # Stop all services
+./scripts/dev.sh restart    # Restart all services
+./scripts/dev.sh logs       # Follow all logs
+./scripts/dev.sh rebuild    # Rebuild backend/frontend
+./scripts/dev.sh clean      # Remove all data
+./scripts/dev.sh kafka      # Open Kafka CLI shell
+```
+
+### Production (`./scripts/prod.sh`)
+
+```bash
+# Service Management
+./scripts/prod.sh start     # Start with health check
+./scripts/prod.sh stop      # Stop with confirmation
+./scripts/prod.sh restart   # Restart all services
+./scripts/prod.sh status    # Status + resource usage
+./scripts/prod.sh health    # Run health checks
+
+# Logs & Monitoring
+./scripts/prod.sh logs              # Follow all logs
+./scripts/prod.sh logs backend      # Follow specific service
+./scripts/prod.sh metrics           # Quick metrics summary
+
+# Maintenance
+./scripts/prod.sh rebuild           # Zero-downtime rebuild
+./scripts/prod.sh rebuild frontend  # Rebuild specific service
+./scripts/prod.sh update            # Git pull + rebuild
+./scripts/prod.sh backup            # Backup data & configs
+./scripts/prod.sh restore           # Restore from backup
+./scripts/prod.sh clean             # Remove all data (DANGEROUS)
+
+# Tools
+./scripts/prod.sh kafka             # Open Kafka CLI shell
+```
+
+---
 
 ## 🧪 Development
 
@@ -373,8 +428,11 @@ demo/
 │       └── dashboards/         # JSON definitions
 ├── docs/
 │   └── ARCHITECTURE.md         # Technical documentation
-└── scripts/
-    └── setup-vps.sh            # VPS deployment script
+├── scripts/
+│   ├── setup-vps.sh            # VPS deployment script
+│   ├── dev.sh                  # Local development helper
+│   └── prod.sh                 # Production management script
+└── .env.example                # Environment variables template
 ```
 
 ## 🎯 Key Features
