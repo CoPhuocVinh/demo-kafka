@@ -140,6 +140,27 @@ show_help() {
 check_requirements() {
     print_header "Checking System Requirements"
     
+    # Check if running as root
+    if [[ $EUID -eq 0 ]]; then
+        print_error "Cannot run as root!"
+        echo ""
+        echo "GitHub Actions runner must run as a non-root user for security reasons."
+        echo ""
+        echo "Please create a dedicated user and run the script again:"
+        echo ""
+        echo -e "  ${CYAN}# Create runner user${NC}"
+        echo -e "  ${GREEN}sudo useradd -m -s /bin/bash runner${NC}"
+        echo -e "  ${GREEN}sudo usermod -aG docker runner${NC}"
+        echo ""
+        echo -e "  ${CYAN}# Switch to runner user${NC}"
+        echo -e "  ${GREEN}sudo su - runner${NC}"
+        echo ""
+        echo -e "  ${CYAN}# Then run this script again${NC}"
+        echo -e "  ${GREEN}GITHUB_REPO_URL=... GITHUB_TOKEN=... ./setup-runner.sh${NC}"
+        echo ""
+        exit 1
+    fi
+    
     # Check if running on Linux
     if [[ "$(uname -s)" != "Linux" ]]; then
         print_error "This script only supports Linux"
@@ -160,6 +181,7 @@ check_requirements() {
     fi
     
     print_success "OS: Linux ($ARCH)"
+    print_success "User: $USER (non-root)"
     
     # Check required tools
     for cmd in curl tar; do
@@ -183,7 +205,9 @@ check_requirements() {
     if groups $USER 2>/dev/null | grep -q docker; then
         print_success "User is in docker group"
     else
-        print_warning "User is not in docker group. Add with: sudo usermod -aG docker $USER"
+        print_warning "User is not in docker group."
+        echo "         Add with: sudo usermod -aG docker $USER"
+        echo "         Then logout and login again."
     fi
 }
 
