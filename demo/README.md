@@ -1,4 +1,4 @@
-# Kafka Multi-Broker Demo - Real-time Data Flow Visualization
+# Kafka Multi-Broker Demo - Real-time Data Flow Visualization - vinhcp
 
 🚀 **Full-stack Apache Kafka demo** với 3-broker cluster (KRaft mode), NestJS backend, React real-time UI, và Prometheus + Grafana monitoring.
 
