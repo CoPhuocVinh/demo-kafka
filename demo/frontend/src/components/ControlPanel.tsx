@@ -4,6 +4,7 @@ import { Play, Square, Send, Terminal, Loader2 } from 'lucide-react';
 export const ControlPanel = () => {
   const [isProducing, setIsProducing] = useState(false);
   const [customMessage, setCustomMessage] = useState('');
+  const [selectedPartition, setSelectedPartition] = useState<number | null>(null); // null = auto
   const [isLoading, setIsLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
 
@@ -71,12 +72,19 @@ export const ControlPanel = () => {
     if (!customMessage.trim()) return;
 
     try {
+      const payload: any = { message: customMessage, type: 'manual' };
+      if (selectedPartition !== null) {
+        payload.partition = selectedPartition;
+      }
+      
       await fetch('/demo/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: customMessage, type: 'manual' }),
+        body: JSON.stringify(payload),
       });
-      addLog(`Sent: ${customMessage}`);
+      
+      const partitionLabel = selectedPartition !== null ? `P${selectedPartition}` : 'Auto';
+      addLog(`Sent [${partitionLabel}]: ${customMessage}`);
       setCustomMessage('');
     } catch (error) {
       addLog('Failed to send message');
@@ -149,6 +157,39 @@ export const ControlPanel = () => {
           <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block ml-1">
             Manual Event Injection
           </label>
+          
+          {/* Partition Selector */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-500 uppercase">Partition:</span>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => setSelectedPartition(null)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
+                  selectedPartition === null
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/30'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                }`}
+              >
+                Auto
+              </button>
+              {[0, 1, 2].map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setSelectedPartition(p)}
+                  className={`px-2.5 py-1 text-xs font-mono font-medium rounded-lg transition-all ${
+                    selectedPartition === p
+                      ? 'bg-amber-500 text-slate-950 shadow-lg shadow-amber-900/30'
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                  }`}
+                >
+                  P{p}
+                </button>
+              ))}
+            </div>
+          </div>
+          
           <div className="flex gap-2 relative">
             <input
               type="text"

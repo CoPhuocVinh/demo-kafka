@@ -142,15 +142,22 @@ export class DemoService implements OnModuleInit {
 
   async produceCustomMessage(message: any): Promise<void> {
     try {
-      this.logger.log(`Sending custom message: ${JSON.stringify(message)}`);
-      await this.producerService.sendBatch('demo-events', [{ value: message }]);
-      this.logger.log('✅ Custom message sent successfully');
+      // Extract partition from message if provided, otherwise use weighted random
+      const partition = message.partition !== undefined && message.partition !== null 
+        ? message.partition 
+        : this.getTargetPartition();
+      
+      this.logger.log(`Sending custom message to partition ${partition}: ${JSON.stringify(message)}`);
+      
+      await this.producerService.sendBatch('demo-events', [{ 
+        value: message,
+        partition,
+      }]);
+      
+      this.logger.log(`✅ Custom message sent successfully to partition ${partition}`);
     } catch (error) {
       this.logger.error('Failed to produce custom message', error);
-      throw error; // Re-throw to let controller handle it, but logged first. 
-      // Actually, if we re-throw, the controller should handle it. 
-      // But if it crashes the process, maybe it's an uncaught exception type?
-      // NestJS Exception Filters usually handle throws.
+      throw error;
     }
   }
 
