@@ -1,0 +1,37 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'kafka-demo'
+    environment: 'development'
+
+scrape_configs:
+  # NestJS Backend Metrics
+  - job_name: 'nestjs-backend'
+    static_configs:
+      - targets: ['backend:3000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Kafka JMX Metrics - Broker 1
+  - job_name: 'kafka-broker-1'
+    static_configs:
+      - targets: ['kafka-1:9101']
+    scrape_interval: 15s
+
+  # Kafka JMX Metrics - Broker 2
+  - job_name: 'kafka-broker-2'
+    static_configs:
+      - targets: ['kafka-2:9101']
+    scrape_interval: 15s
+
+  # Kafka JMX Metrics - Broker 3
+  - job_name: 'kafka-broker-3'
+    static_configs:
+      - targets: ['kafka-3:9101']
+    scrape_interval: 15s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
