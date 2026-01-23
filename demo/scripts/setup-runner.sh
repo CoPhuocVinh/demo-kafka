@@ -118,13 +118,21 @@ setup_runner_user() {
     chmod 440 /etc/sudoers.d/$RUNNER_USER
     print_success "Sudo configured (no password required)"
     
-    # Set password (optional)
+    # Set password with default
+    DEFAULT_PASSWORD="Default123"
     echo ""
-    read -p "Set a password for '$RUNNER_USER'? (y/N) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        passwd "$RUNNER_USER"
+    echo "Set password for '$RUNNER_USER'"
+    echo -e "  (Press Enter for default: ${CYAN}$DEFAULT_PASSWORD${NC})"
+    read -sp "Password: " USER_PASSWORD
+    echo ""
+    
+    if [ -z "$USER_PASSWORD" ]; then
+        USER_PASSWORD="$DEFAULT_PASSWORD"
+        print_info "Using default password: $DEFAULT_PASSWORD"
     fi
+    
+    echo "$RUNNER_USER:$USER_PASSWORD" | chpasswd
+    print_success "Password set successfully"
     
     print_header "User Setup Complete!"
     
