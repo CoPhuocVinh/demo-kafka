@@ -52,7 +52,7 @@ export const Dashboard = () => {
                 KAFKA<span className="font-light text-slate-400">DEMO</span>
               </h1>
             </div>
-            <p className="text-slate-400 text-sm pl-6 font-mono tracking-wide">REAL-TIME CLUSTER OBSERVABILITY</p>
+            <p className="text-slate-400 text-sm pl-6 font-mono tracking-wide">REAL-TIME CLUSTER OBSERVABILITY BY APP TEAM - YOUNETMEDIA</p>
           </div>
           
           <div className="flex items-center gap-3">
